@@ -17,6 +17,8 @@ import React, { useState, useRef, useEffect } from 'react';
       const recognitionRef = useRef<SpeechRecognition | null>(null);
       const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
       const [currentFeatureIndex, setCurrentFeatureIndex] = useState(0);
+      const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+      const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
       const features = [
         {
           title: "Voice Commands",
@@ -89,6 +91,21 @@ import React, { useState, useRef, useEffect } from 'react';
           setCurrentFeatureIndex((prevIndex) => (prevIndex + 1) % features.length);
         }, 5000);
 
+        const getCameras = async () => {
+          try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter((device) => device.kind === 'videoinput');
+            setAvailableCameras(videoDevices);
+            if (videoDevices.length > 0) {
+              setSelectedCameraId(videoDevices[0].deviceId);
+            }
+          } catch (error) {
+            console.error('Error enumerating devices:', error);
+          }
+        };
+
+        getCameras();
+
         return () => {
           if (speechSynthesisRef.current) {
             speechSynthesisRef.current.cancel();
@@ -100,6 +117,12 @@ import React, { useState, useRef, useEffect } from 'react';
           clearInterval(intervalId);
         };
       }, [features.length]);
+
+      useEffect(() => {
+        if (selectedCameraId) {
+          startCamera();
+        }
+      }, [selectedCameraId]);
 
       const handleVoiceCommand = async (command: string) => {
         console.log('Received command:', command);
@@ -178,7 +201,17 @@ import React, { useState, useRef, useEffect } from 'react';
 
       const startCamera = async () => {
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          const constraints: MediaStreamConstraints = {
+            video: selectedCameraId
+              ? { deviceId: { exact: selectedCameraId },
+                  width: { ideal: 4096 },
+                  height: { ideal: 2160 }
+                }
+              : { width: { ideal: 4096 },
+                  height: { ideal: 2160 }
+                },
+          };
+          const stream = await navigator.mediaDevices.getUserMedia(constraints);
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             setIsRecording(true);
@@ -228,13 +261,13 @@ import React, { useState, useRef, useEffect } from 'react';
         let imageToSend = null;
 
         if (isVoice && (input.includes('what') || input.includes('how') || input.includes('where') || input.includes('who') || input.includes('this') || input.includes('it') || input.includes('find'))) {
-          currentPrompt = ` "${input}" for visually impaired or blind people. use conversational mode but do not mention about any disability.`;
+          currentPrompt = ` "${input}" for visually impaired or blind people. `;
           if (capturedImage) {
             currentPrompt += `Image: `;
             imageToSend = capturedImage;
           }
         } else if (!isVoice) {
-          currentPrompt = `"${input}" for visually impaired or blind people. use conversational mode but do not mention about any disability.`;
+          currentPrompt = `Based on the following text, answer any questions if asked: "${input}" for visually impaired or blind people.`;
           if (capturedImage && (input.includes('what') || input.includes('how') || input.includes('where') || input.includes('who') || input.includes('picture') || input.includes('image'))) {
             currentPrompt += ` Also consider this image: `;
             imageToSend = capturedImage;
@@ -322,7 +355,7 @@ import React, { useState, useRef, useEffect } from 'react';
             <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
               <div className="flex items-center space-x-2">
                 <Eye className="h-8 w-8 text-blue-600" />
-                <h1 className="text-2xl font-bold text-gray-900">AI Vision Assistant</h1>
+                <h1 className="text-2xl font-bold text-gray-900"> LifeSight - AI Vision Assistant</h1>
               </div>
               <Settings className="h-6 w-6 text-gray-600 cursor-pointer hover:text-blue-600" />
             </div>
@@ -331,6 +364,7 @@ import React, { useState, useRef, useEffect } from 'react';
           {/* Main Content */}
           <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
             <div className="max-w-3xl mx-auto">
+              
 
               {/* Camera Preview */}
               <div className="relative aspect-video bg-gray-900 rounded-lg overflow-hidden shadow-lg mb-6">
@@ -347,6 +381,27 @@ import React, { useState, useRef, useEffect } from 'react';
                   )}
                 </div>
               </div>
+
+              {/* Camera Selection */}
+              {availableCameras.length > 1 && (
+                <div className="mb-4">
+                  <label htmlFor="cameraSelect" className="block text-sm font-medium text-gray-700">
+                    Select Camera:
+                  </label>
+                  <select
+                    id="cameraSelect"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    value={selectedCameraId || ''}
+                    onChange={(e) => setSelectedCameraId(e.target.value)}
+                  >
+                    {availableCameras.map((camera) => (
+                      <option key={camera.deviceId} value={camera.deviceId}>
+                        {camera.label || `Camera ${availableCameras.indexOf(camera) + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Controls */}
               <div className="flex justify-center space-x-4 mb-8">
@@ -376,7 +431,7 @@ import React, { useState, useRef, useEffect } from 'react';
                   onClick={isListening ? stopListening : startListening}
                   className={`p-4 rounded-full transition-colors ${
                     isListening
-                      ? 'bg-green-500 hover:bg-green-600'
+                      ? 'bg-blue-500 hover:bg-blue-600'
                       : 'bg-gray-100 hover:bg-gray-200'
                   }`}
                   aria-label="Toggle voice input"
