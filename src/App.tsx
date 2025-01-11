@@ -284,34 +284,20 @@ import React, { useState, useRef, useEffect } from 'react';
           setIsListening(false);
         }
 
-				if (isVoice && isRecording && videoRef.current) {
-				  // Get the video track from the media stream
-				  const videoTrack = videoRef.current.srcObject?.getVideoTracks()[0];
+				if (isVoice || (isRecording && videoRef.current)) {
+				  const canvas = document.createElement('canvas');
+				  // Use the full camera sensor resolution
+				  canvas.width = videoRef.current.videoWidth;
+				  canvas.height = videoRef.current.videoHeight;
 				
-				  if (videoTrack) {
-				    // Get the capabilities of the video track (max resolution it supports)
-				    const capabilities = videoTrack.getCapabilities();
-				
-				    // Use the maximum width and height from the camera's capabilities
-				    const maxWidth = capabilities.width ? capabilities.width.max : 1920;  // Default to 1920 if not available
-				    const maxHeight = capabilities.height ? capabilities.height.max : 1080; // Default to 1080 if not available
-				
-				    // Create a canvas with the maximum supported resolution
-				    const canvas = document.createElement('canvas');
-				    canvas.width = maxWidth;
-				    canvas.height = maxHeight;
-				
-				    const ctx = canvas.getContext('2d');
-				    if (ctx) {
-				      // Draw the full frame from the video feed onto the canvas
-				      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-				      const imageDataURL = canvas.toDataURL('image/jpeg');
-				      setCapturedImage(imageDataURL);
-				      videoToSend = await uploadVideo(videoRef.current.srcObject as MediaStream);
-				    }
+				  const ctx = canvas.getContext('2d');
+				  if (ctx) {
+				    // Draw the full frame from the video feed onto the canvas
+				    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+				    const imageDataURL = canvas.toDataURL('image/jpeg');
+				    setCapturedImage(imageDataURL);
+				    imageToSend = imageDataURL;
 				  }
-				} else if (capturedImage) {
-				  imageToSend = capturedImage;
 				}
       
         const newDescription = await generateDescription(currentPrompt, imageToSend, videoToSend, isVoice);
