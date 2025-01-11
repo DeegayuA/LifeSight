@@ -44,6 +44,7 @@ import React, { useState, useRef, useEffect } from 'react';
           recognitionRef.current = new SpeechRecognition();
           recognitionRef.current.continuous = true;
           recognitionRef.current.interimResults = false;
+          recognitionRef.current.lang = 'en-US';
 
           recognitionRef.current.onresult = (event) => {
             const command = event.results[event.results.length - 1][0].transcript.toLowerCase();
@@ -138,7 +139,7 @@ import React, { useState, useRef, useEffect } from 'react';
           stopListening();
         } else if (command.includes('again')) {
           replayLastResponse();
-        } else if (command.includes('what') || command.includes('how') || command.includes('where') || command.includes('who') || command.includes('this') || command.includes('it') || command.includes('find')) {
+        } else if (command.includes('what') || command.includes('how') || command.includes('where') || command.includes('who') || command.includes('this') || command.includes('it') || command.includes('find') || command.includes('picture') || command.includes('image')) {
           await processInput(command, true);
         } else {
           await processInput(command, false);
@@ -259,28 +260,16 @@ import React, { useState, useRef, useEffect } from 'react';
       };
 
       const processInput = async (input: string, isVoice: boolean) => {
-        let currentPrompt = ``;
+        let currentPrompt = '';
         let imageToSend = null;
-
-        if (isVoice && (input.includes('what') || input.includes('how') || input.includes('where') || input.includes('who') || input.includes('this') || input.includes('it') || input.includes('find'))) {
-          currentPrompt = ` "${input}" for visually impaired or blind people.  Do not mention about disabilities in answer. Use conversation mode.`;
-          if (capturedImage) {
-            currentPrompt += `Image: `;
-            imageToSend = capturedImage;
-          }
-        } else if (!isVoice) {
-          currentPrompt = `Based on the following text, answer any questions if asked: "${input}" for visually impaired or blind people. Do not mention about disabilities in answer. Use conversation mode.`;
-          if (capturedImage && (input.includes('what') || input.includes('how') || input.includes('where') || input.includes('who') || input.includes('picture') || input.includes('image'))) {
-            currentPrompt += ` Also consider this image: `;
-            imageToSend = capturedImage;
-          }
-        } else {
-          currentPrompt = `Describe the following input: "${input}". Do not mention about disabilities in answer. Use conversation mode.`;
-        }
         
-        if (!isVoice) {
-          currentPrompt += `${inputText}`;
+        if (isVoice) {
+          currentPrompt = `Based on the following voice input, answer any questions if asked: "${input}" for visually impaired or blind people. Do not mention about disabilities in answer. Use conversation mode.`;
+        } else {
+          currentPrompt = `Based on the following text, answer any questions if asked: "${input}" for visually impaired or blind people. Do not mention about disabilities in answer. Use conversation mode.`;
         }
+      
+        currentPrompt += ` ${inputText}`;
         setPrompt(currentPrompt);
         console.log('Prompt:', currentPrompt);
         
@@ -294,60 +283,53 @@ import React, { useState, useRef, useEffect } from 'react';
           setIsListening(false);
         }
 
-        if (isRecording && videoRef.current) {
-          const canvas = document.createElement('canvas');
-          canvas.width = videoRef.current.videoWidth;
-          canvas.height = videoRef.current.videoHeight;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-            const imageDataURL = canvas.toDataURL('image/jpeg');
-            setCapturedImage(imageDataURL);
-            const newDescription = await generateDescription(currentPrompt, imageDataURL);
-            setDescription(newDescription);
-            const utterance = new SpeechSynthesisUtterance(newDescription);
-            currentUtteranceRef.current = utterance;
-            utterance.onstart = () => {
-              if (recognitionRef.current) {
-                recognitionRef.current.abort();
-                setIsListening(false);
-              }
-            };
-            utterance.onend = () => {
-              setIsSpeaking(false);
-              if (recognitionRef.current) {
-                recognitionRef.current.start();
-                setIsListening(true);
-              }
-            };
-            speechSynthesisRef.current?.speak(utterance);
-            setLastSpokenResponse(newDescription);
-            setIsSpeaking(true);
+				if (isRecording && videoRef.current) {
+					  const canvas = document.createElement('canvas');
+					  // Use the full sensor dimensions (the native resolution of the camera)
+					  canvas.width = videoRef.current.videoWidth;
+					  canvas.height = videoRef.current.videoHeight;
+					  
+					  const ctx = canvas.getContext('2d');
+					  if (ctx) {
+					    // Draw the video frame to the canvas
+					    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+					    // Convert canvas to JPEG data URL
+					    const imageDataURL = canvas.toDataURL('image/jpeg');
+					    setCapturedImage(imageDataURL);
+					    imageToSend = imageDataURL;
+					  }
+					} else if (capturedImage) {
+					  imageToSend = capturedImage;
+					}
+      
+        const newDescription = await generateDescription(currentPrompt, imageToSend);
+        setDescription(newDescription);
+        const utterance = new SpeechSynthesisUtterance(newDescription);
+        currentUtteranceRef.current = utterance;
+        utterance.onstart = () => {
+          if (recognitionRef.current) {
+            recognitionRef.current.abort();
+            setIsListening(false);
           }
-        } else {
-          const newDescription = await generateDescription(currentPrompt, imageToSend);
-          setDescription(newDescription);
-          const utterance = new SpeechSynthesisUtterance(newDescription);
-          currentUtteranceRef.current = utterance;
-          utterance.onstart = () => {
-            if (recognitionRef.current) {
-              recognitionRef.current.abort();
-              setIsListening(false);
-            }
-          };
-          utterance.onend = () => {
-            setIsSpeaking(false);
-            if (recognitionRef.current) {
-              recognitionRef.current.start();
-              setIsListening(true);
-            }
-          };
-          speechSynthesisRef.current?.speak(utterance);
-          setLastSpokenResponse(newDescription);
-          setIsSpeaking(true);
-        }
+        };
+        utterance.onend = () => {
+          setIsSpeaking(false);
+          if (recognitionRef.current) {
+            recognitionRef.current.start();
+            setIsListening(true);
+          }
+        };
+        speechSynthesisRef.current?.speak(utterance);
+        setLastSpokenResponse(newDescription);
+        setIsSpeaking(true);
         setInputText('');
         setCapturedImage(null);
+      };
+
+      const triggerHapticFeedback = () => {
+        if ('vibrate' in navigator) {
+          navigator.vibrate(50);
+        }
       };
 
       return (
@@ -369,7 +351,7 @@ import React, { useState, useRef, useEffect } from 'react';
               
 
               {/* Camera Preview */}
-              <div className="relative aspect-video bg-gray-900 rounded-lg overflow-hidden shadow-lg mb-6">
+              <div className="relative bg-gray-900 rounded-lg overflow-hidden shadow-lg mb-6">
                 <video
                   ref={videoRef}
                   autoPlay
@@ -408,7 +390,10 @@ import React, { useState, useRef, useEffect } from 'react';
               {/* Controls */}
               <div className="flex justify-center space-x-4 mb-8">
                 <button
-                  onClick={isRecording ? stopCamera : startCamera}
+                  onClick={() => {
+                    triggerHapticFeedback();
+                    isRecording ? stopCamera() : startCamera();
+                  }}
                   className={`p-4 rounded-full ${
                     isRecording
                       ? 'bg-red-500 hover:bg-red-600'
@@ -419,7 +404,10 @@ import React, { useState, useRef, useEffect } from 'react';
                   <Camera className={`h-8 w-8 ${isRecording ? 'text-white' : 'text-gray-700'}`} />
                 </button>
                 <button
-                  onClick={speakDescription}
+                  onClick={() => {
+                    triggerHapticFeedback();
+                    speakDescription();
+                  }}
                   className={`p-4 rounded-full transition-colors ${
                     isSpeaking
                       ? 'bg-green-500 hover:bg-green-600'
@@ -430,7 +418,10 @@ import React, { useState, useRef, useEffect } from 'react';
                   <Volume2 className={`h-8 w-8 ${isSpeaking ? 'text-white' : 'text-gray-700'}`} />
                 </button>
                 <button
-                  onClick={isListening ? stopListening : startListening}
+                  onClick={() => {
+                    triggerHapticFeedback();
+                    isListening ? stopListening() : startListening();
+                  }}
                   className={`p-4 rounded-full transition-colors ${
                     isListening
                       ? 'bg-blue-500 hover:bg-blue-600'
@@ -449,11 +440,12 @@ import React, { useState, useRef, useEffect } from 'react';
                     type="text"
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    className="flex-1 block w-full rounded-none rounded-l-md border-gray-300 focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    className="flex-1 block w-full rounded-md border-gray-300 focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-4 py-2"
                     placeholder="Enter text here..."
                   />
                   <button
                     type="submit"
+                    onClick={triggerHapticFeedback}
                     className="px-4 py-2 bg-blue-500 text-white rounded-r-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
                   >
                     <Type className="h-5 w-5" />
@@ -491,7 +483,7 @@ import React, { useState, useRef, useEffect } from 'react';
                   <li>"Start mic" - Start voice recognition</li>
                   <li>"Stop mic" - Stop voice recognition</li>
                   <li>"Again" - Replay last spoken response</li>
-                  <li>"What is this?", "How do I do this?", "Where is this?", "Who is this?", "this", "it", "find" - Ask questions about the input</li>
+                  <li>"What is this?", "How do I do this?", "Where is this?", "Who is this?", "this", "it", "find", "picture", "image" - Ask questions about the input</li>
                 </ul>
               </div>
 
