@@ -207,8 +207,10 @@ import React, { useState, useRef, useEffect } from 'react';
                   width: { ideal: 4096 },
                   height: { ideal: 2160 }
                 }
-              : { width: { ideal: 4096 },
-                  height: { ideal: 2160 }
+              : {
+                  facingMode: 'environment',
+                  width: { ideal: window.screen.width },
+                  height: { ideal: window.screen.height },
                 },
           };
           const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -261,19 +263,19 @@ import React, { useState, useRef, useEffect } from 'react';
         let imageToSend = null;
 
         if (isVoice && (input.includes('what') || input.includes('how') || input.includes('where') || input.includes('who') || input.includes('this') || input.includes('it') || input.includes('find'))) {
-          currentPrompt = ` "${input}" for visually impaired or blind people. `;
+          currentPrompt = ` "${input}" for visually impaired or blind people.  Do not mention about disabilities in answer. Use conversation mode.`;
           if (capturedImage) {
             currentPrompt += `Image: `;
             imageToSend = capturedImage;
           }
         } else if (!isVoice) {
-          currentPrompt = `Based on the following text, answer any questions if asked: "${input}" for visually impaired or blind people.`;
+          currentPrompt = `Based on the following text, answer any questions if asked: "${input}" for visually impaired or blind people. Do not mention about disabilities in answer. Use conversation mode.`;
           if (capturedImage && (input.includes('what') || input.includes('how') || input.includes('where') || input.includes('who') || input.includes('picture') || input.includes('image'))) {
             currentPrompt += ` Also consider this image: `;
             imageToSend = capturedImage;
           }
         } else {
-          currentPrompt = `Describe the following input: "${input}"`;
+          currentPrompt = `Describe the following input: "${input}". Do not mention about disabilities in answer. Use conversation mode.`;
         }
         
         if (!isVoice) {
@@ -480,7 +482,7 @@ import React, { useState, useRef, useEffect } from 'react';
               )}
 
 							{/* Voice Commands Guide */}
-              <div className="bg-blue-50 rounded-lg p-4 mb-6">
+              <div className="bg-blue-50 rounded-lg p-4 mt-6">
                 <h2 className="text-sm font-semibold text-blue-800 mb-2">Voice Commands:</h2>
                 <ul className="text-sm text-blue-700 space-y-1">
                   <li>"Start camera" - Start camera</li>
@@ -494,7 +496,7 @@ import React, { useState, useRef, useEffect } from 'react';
               </div>
 
               {/* Features */}
-              <div className="mt-12">
+              <div className="mt-6">
                 <div className="bg-white p-6 rounded-lg shadow-md">
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">{features[currentFeatureIndex].title}</h3>
                   <p className="text-gray-600">{features[currentFeatureIndex].description}</p>
