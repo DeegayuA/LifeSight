@@ -205,13 +205,14 @@ import React, { useState, useRef, useEffect } from 'react';
           const constraints: MediaStreamConstraints = {
             video: selectedCameraId
               ? { deviceId: { exact: selectedCameraId },
-                  width: { ideal: 4096 },
-                  height: { ideal: 2160 }
+                  width: { ideal: 1920 },
+                  height: { ideal: 1080 },
+                  facingMode: 'environment'
                 }
               : {
                   facingMode: 'environment',
-                  width: { ideal: window.screen.width },
-                  height: { ideal: window.screen.height },
+                  width: { ideal: 1920 },
+                  height: { ideal: 1080 },
                 },
           };
           const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -262,14 +263,14 @@ import React, { useState, useRef, useEffect } from 'react';
       const processInput = async (input: string, isVoice: boolean) => {
         let currentPrompt = '';
         let imageToSend = null;
+        let videoToSend = null;
         
         if (isVoice) {
           currentPrompt = `Based on the following voice input, answer any questions if asked: "${input}" for visually impaired or blind people. Do not mention about disabilities in answer. Use conversation mode.`;
         } else {
           currentPrompt = `Based on the following text, answer any questions if asked: "${input}" for visually impaired or blind people. Do not mention about disabilities in answer. Use conversation mode.`;
         }
-      
-        currentPrompt += ` ${inputText}`;
+
         setPrompt(currentPrompt);
         console.log('Prompt:', currentPrompt);
         
@@ -283,26 +284,37 @@ import React, { useState, useRef, useEffect } from 'react';
           setIsListening(false);
         }
 
-				if (isRecording && videoRef.current) {
-					  const canvas = document.createElement('canvas');
-					  // Use the full sensor dimensions (the native resolution of the camera)
-					  canvas.width = videoRef.current.videoWidth;
-					  canvas.height = videoRef.current.videoHeight;
-					  
-					  const ctx = canvas.getContext('2d');
-					  if (ctx) {
-					    // Draw the video frame to the canvas
-					    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-					    // Convert canvas to JPEG data URL
-					    const imageDataURL = canvas.toDataURL('image/jpeg');
-					    setCapturedImage(imageDataURL);
-					    imageToSend = imageDataURL;
-					  }
-					} else if (capturedImage) {
-					  imageToSend = capturedImage;
-					}
+				if (isVoice && isRecording && videoRef.current) {
+				  // Get the video track from the media stream
+				  const videoTrack = videoRef.current.srcObject?.getVideoTracks()[0];
+				
+				  if (videoTrack) {
+				    // Get the capabilities of the video track (max resolution it supports)
+				    const capabilities = videoTrack.getCapabilities();
+				
+				    // Use the maximum width and height from the camera's capabilities
+				    const maxWidth = capabilities.width ? capabilities.width.max : 1920;  // Default to 1920 if not available
+				    const maxHeight = capabilities.height ? capabilities.height.max : 1080; // Default to 1080 if not available
+				
+				    // Create a canvas with the maximum supported resolution
+				    const canvas = document.createElement('canvas');
+				    canvas.width = maxWidth;
+				    canvas.height = maxHeight;
+				
+				    const ctx = canvas.getContext('2d');
+				    if (ctx) {
+				      // Draw the full frame from the video feed onto the canvas
+				      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+				      const imageDataURL = canvas.toDataURL('image/jpeg');
+				      setCapturedImage(imageDataURL);
+				      videoToSend = await uploadVideo(videoRef.current.srcObject as MediaStream);
+				    }
+				  }
+				} else if (capturedImage) {
+				  imageToSend = capturedImage;
+				}
       
-        const newDescription = await generateDescription(currentPrompt, imageToSend);
+        const newDescription = await generateDescription(currentPrompt, imageToSend, videoToSend, isVoice);
         setDescription(newDescription);
         const utterance = new SpeechSynthesisUtterance(newDescription);
         currentUtteranceRef.current = utterance;
@@ -351,7 +363,7 @@ import React, { useState, useRef, useEffect } from 'react';
               
 
               {/* Camera Preview */}
-              <div className="relative bg-gray-900 rounded-lg overflow-hidden shadow-lg mb-6">
+              <div className="relative aspect-auto bg-gray-900 rounded-lg overflow-hidden shadow-lg mb-6">
                 <video
                   ref={videoRef}
                   autoPlay
@@ -372,18 +384,21 @@ import React, { useState, useRef, useEffect } from 'react';
                   <label htmlFor="cameraSelect" className="block text-sm font-medium text-gray-700">
                     Select Camera:
                   </label>
-                  <select
-                    id="cameraSelect"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                    value={selectedCameraId || ''}
-                    onChange={(e) => setSelectedCameraId(e.target.value)}
-                  >
+                  <div className="mt-1 flex space-x-2">
                     {availableCameras.map((camera) => (
-                      <option key={camera.deviceId} value={camera.deviceId}>
+                      <button
+                        key={camera.deviceId}
+                        onClick={() => setSelectedCameraId(camera.deviceId)}
+                        className={`px-4 py-2 rounded-md border ${
+                          selectedCameraId === camera.deviceId
+                            ? 'bg-blue-500 text-white border-blue-500'
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+                        } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50`}
+                      >
                         {camera.label || `Camera ${availableCameras.indexOf(camera) + 1}`}
-                      </option>
+                      </button>
                     ))}
-                  </select>
+                  </div>
                 </div>
               )}
 
