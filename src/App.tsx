@@ -1,6 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
-    import { Camera, Volume2, Settings, Eye, Mic, Type } from 'lucide-react';
+import React, { useState, useRef, useEffect, createContext, useContext } from 'react';
+    import { Camera, Volume2, Settings, Eye, Mic, Type, Moon, Sun } from 'lucide-react';
     import { generateDescription } from './gemini';
+    import translate from 'google-translate-api';
+
+    // Theme context
+    const ThemeContext = createContext({
+      theme: 'light',
+      toggleTheme: () => {},
+    });
 
     function App() {
       const [isRecording, setIsRecording] = useState(false);
@@ -19,6 +26,8 @@ import React, { useState, useRef, useEffect } from 'react';
       const [currentFeatureIndex, setCurrentFeatureIndex] = useState(0);
       const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
       const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+      const [selectedLanguage, setSelectedLanguage] = useState('en');
+      const [darkMode, setDarkMode] = useState(false);
       const features = [
         {
           title: "Voice Commands",
@@ -516,15 +525,35 @@ import React, { useState, useRef, useEffect } from 'react';
       };
 
       return (
-        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+        <ThemeContext.Provider value={{ theme: darkMode ? 'dark' : 'light', toggleTheme }}>
+        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
           {/* Header */}
-          <header className="bg-white shadow-sm">
+          <header className="bg-white shadow-sm dark:bg-gray-700">
             <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
               <div className="flex items-center space-x-2">
-                <Eye className="h-8 w-8 text-blue-600" />
-                <h1 className="text-2xl font-bold text-gray-900"> LifeSight - AI Vision Assistant</h1>
+                <Eye className="h-8 w-8 text-blue-600 dark:text-white" />
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white"> LifeSight - AI Vision Assistant</h1>
               </div>
-              <Settings className="h-6 w-6 text-gray-600 cursor-pointer hover:text-blue-600" />
+              <div className="flex items-center space-x-4">
+                <select
+                  value={selectedLanguage}
+                  onChange={handleLanguageChange}
+                  className="bg-gray-100 dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-md px-2 py-1 text-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                >
+                  {allLanguages.map((lang) => (
+                    <option key={lang.code} value={lang.code}>
+                      {lang.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={toggleTheme}
+                  className="p-2 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                  aria-label="Toggle theme"
+                >
+                  {darkMode ? <Sun className="h-5 w-5 text-white" /> : <Moon className="h-5 w-5 text-gray-700 dark:text-white" />}
+                </button>
+              </div>
             </div>
           </header>
 
@@ -552,7 +581,7 @@ import React, { useState, useRef, useEffect } from 'react';
               {/* Camera Selection */}
               {availableCameras.length > 1 && (
                 <div className="mb-4">
-                  <label htmlFor="cameraSelect" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="cameraSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Select Camera:
                   </label>
                   <div className="mt-1 flex space-x-2">
@@ -563,7 +592,7 @@ import React, { useState, useRef, useEffect } from 'react';
                         className={`px-4 py-2 rounded-md border ${
                           selectedCameraId === camera.deviceId
                             ? 'bg-blue-500 text-white border-blue-500'
-                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+                            : 'bg-white text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-600'
                         } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50`}
                       >
                         {camera.label || `Camera ${availableCameras.indexOf(camera) + 1}`}
@@ -583,11 +612,11 @@ import React, { useState, useRef, useEffect } from 'react';
                   className={`p-4 rounded-full ${
                     isRecording
                       ? 'bg-red-500 hover:bg-red-600'
-                      : 'bg-gray-100 hover:bg-gray-200'
+                      : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600'
                   } text-white transition-colors`}
                   aria-label="Stop camera"
                 >
-                  <Camera className={`h-8 w-8 ${isRecording ? 'text-white' : 'text-gray-700'}`} />
+                  <Camera className={`h-8 w-8 ${isRecording ? 'text-white' : 'text-gray-700 dark:text-white'}`} />
                 </button>
                 <button
                   onClick={() => {
@@ -597,11 +626,11 @@ import React, { useState, useRef, useEffect } from 'react';
                   className={`p-4 rounded-full transition-colors ${
                     isSpeaking
                       ? 'bg-green-500 hover:bg-green-600'
-                      : 'bg-gray-100 hover:bg-gray-200'
+                      : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600'
                   }`}
                   aria-label="Toggle speech output"
                 >
-                  <Volume2 className={`h-8 w-8 ${isSpeaking ? 'text-white' : 'text-gray-700'}`} />
+                  <Volume2 className={`h-8 w-8 ${isSpeaking ? 'text-white' : 'text-gray-700 dark:text-white'}`} />
                 </button>
                 <button
                   onClick={() => {
@@ -611,11 +640,11 @@ import React, { useState, useRef, useEffect } from 'react';
                   className={`p-4 rounded-full transition-colors ${
                     isListening
                       ? 'bg-blue-500 hover:bg-blue-600'
-                      : 'bg-gray-100 hover:bg-gray-200'
+                      : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600'
                   }`}
                   aria-label="Toggle voice input"
                 >
-                  <Mic className={`h-8 w-8 ${isListening ? 'text-white' : 'text-gray-700'}`} />
+                  <Mic className={`h-8 w-8 ${isListening ? 'text-white' : 'text-gray-700 dark:text-white'}`} />
                 </button>
               </div>
 
@@ -626,7 +655,7 @@ import React, { useState, useRef, useEffect } from 'react';
                     type="text"
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    className="flex-1 block w-full rounded-md border-gray-300 focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-4 py-2"
+                    className="flex-1 block w-full rounded-md border-gray-300 dark:border-gray-500 focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-4 py-2 dark:bg-gray-700 dark:text-white"
                     placeholder="Enter text here..."
                   />
                   <button
@@ -641,11 +670,11 @@ import React, { useState, useRef, useEffect } from 'react';
 
               {/* Status Indicators */}
               <div className="flex justify-center space-x-4 mb-8">
-                <span className={`text-sm ${isListening ? 'text-green-600' : 'text-red-600'}`}>
+                <span className={`text-sm ${isListening ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                   {isListening ? 'Voice commands are active' : 'Voice recognition inactive'}
                 </span>
                 {isSpeaking && (
-                  <span className="text-sm text-green-600">
+                  <span className="text-sm text-green-600 dark:text-green-400">
                     Speaking...
                   </span>
                 )}
@@ -653,16 +682,16 @@ import React, { useState, useRef, useEffect } from 'react';
 
               {/* Description */}
               {description && (
-                <div className="bg-white rounded-lg p-6 shadow-md">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-2">AI Description:</h2>
-                  <p className="text-gray-700">{description}</p>
+                <div className="bg-white rounded-lg p-6 shadow-md dark:bg-gray-700">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">AI Description:</h2>
+                  <p className="text-gray-700 dark:text-gray-300">{description}</p>
                 </div>
               )}
 
 							{/* Voice Commands Guide */}
-              <div className="bg-blue-50 rounded-lg p-4 mt-6">
-                <h2 className="text-sm font-semibold text-blue-800 mb-2">Voice Commands:</h2>
-                <ul className="text-sm text-blue-700 space-y-1">
+              <div className="bg-blue-50 rounded-lg p-4 mt-6 dark:bg-gray-700">
+                <h2 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-2">Voice Commands:</h2>
+                <ul className="text-sm text-blue-700 dark:text-blue-200 space-y-1">
                   <li>"Start camera" - Start camera</li>
                   <li>"Stop camera" - Stop camera</li>
                   <li>"Read" or "Describe" - Read current description</li>
@@ -675,14 +704,15 @@ import React, { useState, useRef, useEffect } from 'react';
 
               {/* Features */}
               <div className="mt-6">
-                <div className="bg-white p-6 rounded-lg shadow-md">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{features[currentFeatureIndex].title}</h3>
-                  <p className="text-gray-600">{features[currentFeatureIndex].description}</p>
+                <div className="bg-white p-6 rounded-lg shadow-md dark:bg-gray-700">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{features[currentFeatureIndex].title}</h3>
+                  <p className="text-gray-600 dark:text-gray-300">{features[currentFeatureIndex].description}</p>
                 </div>
               </div>
             </div>
           </main>
         </div>
+        </ThemeContext.Provider>
       );
     }
 
