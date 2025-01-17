@@ -28,6 +28,7 @@ import React, { useState, useRef, useEffect, createContext, useContext } from 'r
       const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
       const [selectedLanguage, setSelectedLanguage] = useState('en');
       const [darkMode, setDarkMode] = useState(false);
+      const [promptHistory, setPromptHistory] = useState<string[]>([]);
       const features = [
         {
           title: "Voice Commands",
@@ -398,12 +399,7 @@ import React, { useState, useRef, useEffect, createContext, useContext } from 'r
         let imageToSend = null;
         let videoToSend = null;
         
-        if (isVoice) {
-          currentPrompt = `Based on the following voice input, answer any questions if asked: "${input}" for visually impaired or blind people. Do not mention about disabilities in answer. Use conversation mode.`;
-        } else {
-          currentPrompt = `Based on the following text, answer any questions if asked: "${input}" for visually impaired or blind people. Do not mention about disabilities in answer. Use conversation mode.`;
-        }
-
+      	currentPrompt = `You are an AI assistant helping a blind person do thier work on thier own, with help of you see (using the camera view) and hear (from user input). The user ask: "${input}". Help the user, Do not mention about disabilities in answer. Use helpful friendly conversation mode. DO NOT LIE.`;
         setPrompt(currentPrompt);
         console.log('Prompt:', currentPrompt);
         
@@ -434,6 +430,7 @@ import React, { useState, useRef, useEffect, createContext, useContext } from 'r
 				}
       
         const newDescription = await generateDescription(currentPrompt, imageToSend, videoToSend, isVoice, selectedLanguage);
+        console.log('Gemini Response:', newDescription);
         setDescription(newDescription);
         const utterance = new SpeechSynthesisUtterance(newDescription);
         currentUtteranceRef.current = utterance;
@@ -455,6 +452,12 @@ import React, { useState, useRef, useEffect, createContext, useContext } from 'r
         setIsSpeaking(true);
         setInputText('');
         setCapturedImage(null);
+
+        // Update prompt history
+        setPromptHistory((prevHistory) => {
+          const updatedHistory = [input, ...prevHistory];
+          return updatedHistory.slice(0, 5);
+        });
       };
 
       const triggerHapticFeedback = () => {
@@ -709,6 +712,18 @@ import React, { useState, useRef, useEffect, createContext, useContext } from 'r
                   <p className="text-gray-600 dark:text-gray-300">{features[currentFeatureIndex].description}</p>
                 </div>
               </div>
+
+              {/* Prompt History */}
+              {promptHistory.length > 0 && (
+                <div className="mt-6">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Last Prompts:</h2>
+                  <ul className="list-disc list-inside text-gray-700 dark:text-gray-300">
+                    {promptHistory.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </main>
         </div>
