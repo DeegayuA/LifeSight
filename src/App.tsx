@@ -1,13 +1,51 @@
 import React, { useState, useRef, useEffect, createContext, useContext } from 'react';
-    import { Camera, Volume2, Settings, Eye, Mic, Type, Moon, Sun } from 'lucide-react';
     import { generateDescription } from './gemini';
     import translate from 'google-translate-api';
+    import Header from './components/Header';
+    import MainContent from './components/MainContent';
 
     // Theme context
     const ThemeContext = createContext({
       theme: 'light',
       toggleTheme: () => {},
     });
+
+    // Define color palettes
+    const lightPalette = {
+      background: 'bg-gradient-to-b from-blue-100 to-white',
+      headerBg: 'bg-white',
+      headerText: 'text-gray-900',
+      buttonBg: 'bg-gray-100',
+      buttonHoverBg: 'hover:bg-gray-200',
+      buttonText: 'text-gray-700',
+      descriptionBg: 'bg-white',
+      descriptionText: 'text-gray-700',
+      voiceGuideBg: 'bg-blue-50',
+      voiceGuideText: 'text-blue-700',
+      featureBg: 'bg-white',
+      featureText: 'text-gray-600',
+      selectBg: 'bg-gray-100',
+      selectText: 'text-gray-700',
+      selectBorder: 'border-gray-300',
+    };
+
+    const darkPalette = {
+      background: 'bg-gradient-to-b from-gray-900 to-gray-800',
+      headerBg: 'bg-gray-800',
+      headerText: 'text-white',
+      buttonBg: 'bg-gray-700',
+      buttonHoverBg: 'hover:bg-gray-600',
+      buttonText: 'text-white',
+      descriptionBg: 'bg-gray-800',
+      descriptionText: 'text-gray-300',
+      voiceGuideBg: 'bg-gray-700',
+      voiceGuideText: 'text-blue-200',
+      featureBg: 'bg-gray-800',
+      featureText: 'text-gray-300',
+      selectBg: 'bg-gray-700',
+      selectText: 'text-white',
+      selectBorder: 'border-gray-500',
+    };
 
     function App() {
       const [isRecording, setIsRecording] = useState(false);
@@ -27,7 +65,13 @@ import React, { useState, useRef, useEffect, createContext, useContext } from 'r
       const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
       const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
       const [selectedLanguage, setSelectedLanguage] = useState('en');
-      const [darkMode, setDarkMode] = useState(false);
+      const [darkMode, setDarkMode] = useState(() => {
+        const storedTheme = localStorage.getItem('theme');
+        if (storedTheme) {
+          return storedTheme === 'dark';
+        }
+        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+      });
       const features = [
         {
           title: "Voice Commands",
@@ -222,14 +266,6 @@ import React, { useState, useRef, useEffect, createContext, useContext } from 'r
         };
 
         getCameras();
-
-        // Theme setup
-        const storedTheme = localStorage.getItem('theme');
-        if (storedTheme) {
-          setDarkMode(storedTheme === 'dark');
-        } else {
-          setDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
-        }
 
         return () => {
           if (speechSynthesisRef.current) {
@@ -524,194 +560,42 @@ import React, { useState, useRef, useEffect, createContext, useContext } from 'r
         setDarkMode((prevMode) => !prevMode);
       };
 
+      const theme = darkMode ? darkPalette : lightPalette;
+
       return (
         <ThemeContext.Provider value={{ theme: darkMode ? 'dark' : 'light', toggleTheme }}>
-        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
-          {/* Header */}
-          <header className="bg-white shadow-sm dark:bg-gray-700">
-            <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
-              <div className="flex items-center space-x-2">
-                <Eye className="h-8 w-8 text-blue-600 dark:text-white" />
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white"> LifeSight - AI Vision Assistant</h1>
-              </div>
-              <div className="flex items-center space-x-4">
-                <select
-                  value={selectedLanguage}
-                  onChange={handleLanguageChange}
-                  className="bg-gray-100 dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-md px-2 py-1 text-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-                >
-                  {allLanguages.map((lang) => (
-                    <option key={lang.code} value={lang.code}>
-                      {lang.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={toggleTheme}
-                  className="p-2 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-                  aria-label="Toggle theme"
-                >
-                  {darkMode ? <Sun className="h-5 w-5 text-white" /> : <Moon className="h-5 w-5 text-gray-700 dark:text-white" />}
-                </button>
-              </div>
-            </div>
-          </header>
-
-          {/* Main Content */}
-          <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-            <div className="max-w-3xl mx-auto">
-              
-
-              {/* Camera Preview */}
-              <div className="relative aspect-auto bg-gray-900 rounded-lg overflow-hidden shadow-lg mb-6">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  {!isRecording && !description && (
-                    <p className="text-white text-lg">Camera is active</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Camera Selection */}
-              {availableCameras.length > 1 && (
-                <div className="mb-4">
-                  <label htmlFor="cameraSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Select Camera:
-                  </label>
-                  <div className="mt-1 flex space-x-2">
-                    {availableCameras.map((camera) => (
-                      <button
-                        key={camera.deviceId}
-                        onClick={() => setSelectedCameraId(camera.deviceId)}
-                        className={`px-4 py-2 rounded-md border ${
-                          selectedCameraId === camera.deviceId
-                            ? 'bg-blue-500 text-white border-blue-500'
-                            : 'bg-white text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50`}
-                      >
-                        {camera.label || `Camera ${availableCameras.indexOf(camera) + 1}`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Controls */}
-              <div className="flex justify-center space-x-4 mb-8">
-                <button
-                  onClick={() => {
-                    triggerHapticFeedback();
-                    isRecording ? stopCamera() : startCamera();
-                  }}
-                  className={`p-4 rounded-full ${
-                    isRecording
-                      ? 'bg-red-500 hover:bg-red-600'
-                      : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600'
-                  } text-white transition-colors`}
-                  aria-label="Stop camera"
-                >
-                  <Camera className={`h-8 w-8 ${isRecording ? 'text-white' : 'text-gray-700 dark:text-white'}`} />
-                </button>
-                <button
-                  onClick={() => {
-                    triggerHapticFeedback();
-                    speakDescription();
-                  }}
-                  className={`p-4 rounded-full transition-colors ${
-                    isSpeaking
-                      ? 'bg-green-500 hover:bg-green-600'
-                      : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600'
-                  }`}
-                  aria-label="Toggle speech output"
-                >
-                  <Volume2 className={`h-8 w-8 ${isSpeaking ? 'text-white' : 'text-gray-700 dark:text-white'}`} />
-                </button>
-                <button
-                  onClick={() => {
-                    triggerHapticFeedback();
-                    isListening ? stopListening() : startListening();
-                  }}
-                  className={`p-4 rounded-full transition-colors ${
-                    isListening
-                      ? 'bg-blue-500 hover:bg-blue-600'
-                      : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600'
-                  }`}
-                  aria-label="Toggle voice input"
-                >
-                  <Mic className={`h-8 w-8 ${isListening ? 'text-white' : 'text-gray-700 dark:text-white'}`} />
-                </button>
-              </div>
-
-              {/* Text Input */}
-              <form onSubmit={handleTextSubmit} className="mb-8">
-                <div className="flex rounded-md shadow-sm">
-                  <input
-                    type="text"
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    className="flex-1 block w-full rounded-md border-gray-300 dark:border-gray-500 focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-4 py-2 dark:bg-gray-700 dark:text-white"
-                    placeholder="Enter text here..."
-                  />
-                  <button
-                    type="submit"
-                    onClick={triggerHapticFeedback}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-r-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-                  >
-                    <Type className="h-5 w-5" />
-                  </button>
-                </div>
-              </form>
-
-              {/* Status Indicators */}
-              <div className="flex justify-center space-x-4 mb-8">
-                <span className={`text-sm ${isListening ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                  {isListening ? 'Voice commands are active' : 'Voice recognition inactive'}
-                </span>
-                {isSpeaking && (
-                  <span className="text-sm text-green-600 dark:text-green-400">
-                    Speaking...
-                  </span>
-                )}
-              </div>
-
-              {/* Description */}
-              {description && (
-                <div className="bg-white rounded-lg p-6 shadow-md dark:bg-gray-700">
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">AI Description:</h2>
-                  <p className="text-gray-700 dark:text-gray-300">{description}</p>
-                </div>
-              )}
-
-							{/* Voice Commands Guide */}
-              <div className="bg-blue-50 rounded-lg p-4 mt-6 dark:bg-gray-700">
-                <h2 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-2">Voice Commands:</h2>
-                <ul className="text-sm text-blue-700 dark:text-blue-200 space-y-1">
-                  <li>"Start camera" - Start camera</li>
-                  <li>"Stop camera" - Stop camera</li>
-                  <li>"Read" or "Describe" - Read current description</li>
-                  <li>"Start mic" - Start voice recognition</li>
-                  <li>"Stop mic" - Stop voice recognition</li>
-                  <li>"Again" - Replay last spoken response</li>
-                  <li>"What is this?", "How do I do this?", "Where is this?", "Who is this?", "this", "it", "find", "picture", "image" - Ask questions about the input</li>
-                </ul>
-              </div>
-
-              {/* Features */}
-              <div className="mt-6">
-                <div className="bg-white p-6 rounded-lg shadow-md dark:bg-gray-700">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{features[currentFeatureIndex].title}</h3>
-                  <p className="text-gray-600 dark:text-gray-300">{features[currentFeatureIndex].description}</p>
-                </div>
-              </div>
-            </div>
-          </main>
-        </div>
+          <div className={`min-h-screen {theme.background}`}>
+            <Header
+              selectedLanguage={selectedLanguage}
+              allLanguages={allLanguages}
+              handleLanguageChange={handleLanguageChange}
+              darkMode={darkMode}
+              toggleTheme={toggleTheme}
+              theme={theme}
+            />
+            <MainContent
+              videoRef={videoRef}
+              isRecording={isRecording}
+              description={description}
+              availableCameras={availableCameras}
+              selectedCameraId={selectedCameraId}
+              setSelectedCameraId={setSelectedCameraId}
+              isSpeaking={isSpeaking}
+              isListening={isListening}
+              startCamera={startCamera}
+              stopCamera={stopCamera}
+              speakDescription={speakDescription}
+              startListening={startListening}
+              stopListening={stopListening}
+              triggerHapticFeedback={triggerHapticFeedback}
+              inputText={inputText}
+              setInputText={setInputText}
+              handleTextSubmit={handleTextSubmit}
+              features={features}
+              currentFeatureIndex={currentFeatureIndex}
+              theme={theme}
+            />
+          </div>
         </ThemeContext.Provider>
       );
     }
