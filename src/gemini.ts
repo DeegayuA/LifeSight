@@ -29,14 +29,9 @@ export async function generateDescription(
     
     parts.push({ text: combinedPrompt });
 
-    const result = await model.generateContent({ contents: [{ parts }] });
+    const result = await model.generateContent({ contents: [{ role: "user", parts }] });
     const response = await result.response;
     let text = response.text();
-
-    if (selectedLanguage && selectedLanguage !== 'en') {
-      const translatedText = await translateText(text, selectedLanguage);
-      return translatedText;
-    }
 
     return text;
   } catch (error) {
