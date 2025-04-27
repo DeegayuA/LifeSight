@@ -1,194 +1,504 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera } from 'lucide-react';
-import { generateDescription } from './gemini';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+    import { Camera, Volume2, Settings, Eye, Mic, Type } from 'lucide-react';
+    import { generateDescription } from './gemini';
 
-function App() {
-  const [isRecording, setIsRecording] = useState(false);
-  const [description, setDescription] = useState('');
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  const [prompt, setPrompt] = useState<string>('Analyze this product image and return a JSON object with only the brand name. Format: {"brand": "brand_name"}');
-  const [attempts, setAttempts] = useState<number>(5);
-  const [accuracy, setAccuracy] = useState<number | undefined>(undefined);
-
-  const processInput = async (input: string, isVoice: boolean) => {
-    let responses: string[] = [];
-
-    // Generate 5 responses and collect them
-    for (let i = 0; i < 5; i++) {
-      const newDescription = await generateDescription(prompt, capturedImage ?? undefined, undefined, isVoice, "en");
-      responses.push(newDescription);
-      console.log(`Attempt ${i + 1}:`, newDescription);
-    }
-
-    // Calculate accuracy
-    const uniqueResponses = Array.from(new Set(responses)); // Removing duplicates
-    const calculatedAccuracy = (uniqueResponses.length === 1) ? 100 : Math.floor((5 - uniqueResponses.length) / 5 * 100);
-    setAccuracy(calculatedAccuracy); // Store the accuracy
-
-    // Display result
-    setDescription(responses[0]); // Use the first response for display
-  };
-
-
-  useEffect(() => {
-    // Start camera automatically
-    startCamera();
-  }, []);
-
-
-
-  const startCamera = async () => {
-    try {
-      const constraints: MediaStreamConstraints = {
-        video:
+    function App() {
+      const [isRecording, setIsRecording] = useState(false);
+      const [description, setDescription] = useState('');
+      const [isListening, setIsListening] = useState(false);
+      const [isSpeaking, setIsSpeaking] = useState(false);
+      const [inputText, setInputText] = useState('');
+      const [capturedImage, setCapturedImage] = useState<string | null>(null);
+      const [lastSpokenResponse, setLastSpokenResponse] = useState<string | null>(null);
+      const [prompt, setPrompt] = useState<string>('');
+      const videoRef = useRef<HTMLVideoElement>(null);
+      const audioRef = useRef<HTMLAudioElement>(null);
+      const speechSynthesisRef = useRef<SpeechSynthesis | null>(null);
+      const recognitionRef = useRef<SpeechRecognition | null>(null);
+      const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+      const [currentFeatureIndex, setCurrentFeatureIndex] = useState(0);
+      const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+      const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+      const features = [
         {
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          facingMode: 'environment'
+          title: "Voice Commands",
+          description: "Control the app hands-free with voice commands. The microphone is always listening for your commands.",
+        },
+        {
+          title: "Audio Feedback",
+          description: "Receive clear audio descriptions of your surroundings. Say 'Read' or click the speaker button to hear the description.",
+        },
+        {
+          title: "Text Input",
+          description: "Enter text and ask questions about it. Click the type button to submit your text.",
+        },
+      ];
+
+      useEffect(() => {
+        // Initialize speech synthesis
+        speechSynthesisRef.current = window.speechSynthesis;
+
+        // Initialize speech recognition
+        if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+          const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+          recognitionRef.current = new SpeechRecognition();
+          recognitionRef.current.continuous = true;
+          recognitionRef.current.interimResults = false;
+          recognitionRef.current.lang = 'en-US';
+
+          recognitionRef.current.onresult = (event) => {
+            const command = event.results[event.results.length - 1][0].transcript.toLowerCase();
+            handleVoiceCommand(command);
+          };
+
+          recognitionRef.current.onend = () => {
+            // Automatically restart recognition when it ends
+            if (isListening) {
+              try {
+                recognitionRef.current?.start();
+              } catch (error) {
+                console.error('Error restarting recognition:', error);
+              }
+            }
+          };
+
+          recognitionRef.current.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            // Attempt to restart on error after a short delay
+            if (isListening) {
+              setTimeout(() => {
+                try {
+                  recognitionRef.current?.start();
+                } catch (error) {
+                  console.error('Error restarting recognition after error:', error);
+                }
+              }, 1000);
+            }
+          };
+
+          // Start listening immediately
+          try {
+            setIsListening(true);
+            recognitionRef.current.start();
+          } catch (error) {
+            console.error('Error starting initial recognition:', error);
+          }
+        }
+
+        // Start camera automatically
+        startCamera();
+
+        const intervalId = setInterval(() => {
+          setCurrentFeatureIndex((prevIndex) => (prevIndex + 1) % features.length);
+        }, 5000);
+
+        const getCameras = async () => {
+          try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter((device) => device.kind === 'videoinput');
+            setAvailableCameras(videoDevices);
+            if (videoDevices.length > 0) {
+              setSelectedCameraId(videoDevices[0].deviceId);
+            }
+          } catch (error) {
+            console.error('Error enumerating devices:', error);
+          }
+        };
+
+        getCameras();
+
+        return () => {
+          if (speechSynthesisRef.current) {
+            speechSynthesisRef.current.cancel();
+          }
+          if (recognitionRef.current) {
+            recognitionRef.current.abort();
+          }
+          setIsListening(false);
+          clearInterval(intervalId);
+        };
+      }, [features.length]);
+
+      useEffect(() => {
+        if (selectedCameraId) {
+          startCamera();
+        }
+      }, [selectedCameraId]);
+
+      const handleVoiceCommand = async (command: string) => {
+        console.log('Received command:', command);
+        if (command.includes('stop camera')) {
+          stopCamera();
+        } else if (command.includes('start camera')) {
+          startCamera();
+        } else if (command.includes('read') || command.includes('describe')) {
+          speakDescription();
+        } else if (command.includes('start mic')) {
+          startListening();
+        } else if (command.includes('stop mic')) {
+          stopListening();
+        } else if (command.includes('again')) {
+          replayLastResponse();
+        } else if (command.includes('what') || command.includes('how') || command.includes('where') || command.includes('who') || command.includes('this') || command.includes('it') || command.includes('find') || command.includes('picture') || command.includes('image')) {
+          await processInput(command, true);
+        } else {
+          await processInput(command, false);
         }
       };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        setIsRecording(true);
-      }
-    } catch (err) {
-      console.error("Error accessing camera:", err);
-      const errorMessage = "Sorry, I couldn't access the camera. Please make sure you've granted camera permissions.";
-      setDescription(errorMessage);
-    }
-  };
 
-  const stopCamera = () => {
-    if (videoRef.current?.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-      tracks.forEach(track => track.stop());
-      setIsRecording(false);
-    }
-  };
-  
-  const processImage = async () => {
-    let imagesToSend: string[] = [];
-    let currentPrompt = 'Analyze the product images and return a JSON object with all the brands found in the images. Format: {"brands": ["brand1", "brand2"]}, Remove any hands or other objects from the images when processing. Try OCR if possible.';
-
-    // Capture 5 images from the video stream
-    if (isRecording && videoRef.current) {
-      for (let i = 0; i < 5; i++) {
-        const canvas = document.createElement('canvas');
-        canvas.width = videoRef.current.videoWidth;
-        canvas.height = videoRef.current.videoHeight;
-
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          // Draw the full frame from the video feed onto the canvas
-          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-          const imageDataURL = canvas.toDataURL('image/jpeg');
-          imagesToSend.push(imageDataURL); // Store the captured image
+      const speakDescription = () => {
+        if (!speechSynthesisRef.current) {
+          alert('Speech synthesis is not supported in your browser');
+          return;
         }
-      }
 
-      // Convert images to base64 and send them to the AI for processing
-      const imageRequests = imagesToSend.map((image, index) => ({
-        inlineData: {
-          data: image.split(',')[1], // Remove the base64 header part
-          mimeType: 'image/jpeg',
-        },
-      }));
+        if (isSpeaking) {
+          speechSynthesisRef.current.cancel();
+          setIsSpeaking(false);
+          return;
+        }
 
-      try {
-        // Send multiple images to the AI model
-        const result = await generateMultipleImages(imageRequests, currentPrompt);
-        console.log(result); // Process the AI response
-        setDescription(result); // Display the AI response
-      } catch (error) {
-        console.error("Error processing multiple images:", error);
-        setDescription("Sorry, there was an issue processing the images.");
-      }
-    }
-  };
+        if (description) {
+          setIsSpeaking(true);
+          const utterance = new SpeechSynthesisUtterance(description);
+          currentUtteranceRef.current = utterance;
+          utterance.onstart = () => {
+            if (recognitionRef.current) {
+              recognitionRef.current.abort();
+              setIsListening(false);
+            }
+          };
+          utterance.onend = () => {
+            setIsSpeaking(false);
+            if (recognitionRef.current) {
+              recognitionRef.current.start();
+              setIsListening(true);
+            }
+          };
+          speechSynthesisRef.current.speak(utterance);
+          setLastSpokenResponse(description);
+        }
+      };
 
-  const generateMultipleImages = async (imageRequests: any[], prompt: string) => {
-    const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'models/gemini-1.5-pro' });
-  
-    try {
-      const result = await model.generateContent([
-        ...imageRequests,
-        prompt
-      ]);
-      return result.response.text();
-    } catch (error: any) {
-      console.error("Error generating content with multiple images:", error);
-      // Show the detailed error message
-      setDescription(`Error: ${error.message || "An unknown error occurred."}`);
-      return `Error: ${error.message || "An unknown error occurred."}`;
-    }
-  };
+      const replayLastResponse = () => {
+        if (lastSpokenResponse) {
+          const utterance = new SpeechSynthesisUtterance(lastSpokenResponse);
+          currentUtteranceRef.current = utterance;
+          utterance.onstart = () => {
+            if (recognitionRef.current) {
+              recognitionRef.current.abort();
+              setIsListening(false);
+            }
+          };
+          utterance.onend = () => {
+            if (recognitionRef.current) {
+              recognitionRef.current.start();
+              setIsListening(true);
+            }
+          };
+          speechSynthesisRef.current?.speak(utterance);
+        }
+      };
 
+      const startCamera = async () => {
+        try {
+          const constraints: MediaStreamConstraints = {
+            video: selectedCameraId
+              ? { deviceId: { exact: selectedCameraId },
+                  width: { ideal: 1920 },
+                  height: { ideal: 1080 },
+                  facingMode: 'environment'
+                }
+              : {
+                  facingMode: 'environment',
+                  width: { ideal: 1920 },
+                  height: { ideal: 1080 },
+                },
+          };
+          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            setIsRecording(true);
+          }
+        } catch (err) {
+          console.error("Error accessing camera:", err);
+          const errorMessage = "Sorry, I couldn't access the camera. Please make sure you've granted camera permissions.";
+          setDescription(errorMessage);
+          const utterance = new SpeechSynthesisUtterance(errorMessage);
+          speechSynthesisRef.current?.speak(utterance);
+        }
+      };
 
+      const stopCamera = () => {
+        if (videoRef.current?.srcObject) {
+          const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+          tracks.forEach(track => track.stop());
+          setIsRecording(false);
+        }
+      };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <div className="max-w-3xl mx-auto">
-          {/* Camera Preview */}
-          <div className="relative aspect-auto bg-gray-900 rounded-lg overflow-hidden shadow-lg mb-6">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 flex items-center justify-center">
-              {!isRecording && !description && (
-                <p className="text-white text-lg">Camera is active</p>
-              )}
+      const handleTextSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        await processInput(inputText, false);
+      };
+
+      const startListening = () => {
+        if (recognitionRef.current && !isListening) {
+          try {
+            setIsListening(true);
+            recognitionRef.current.start();
+          } catch (error) {
+            console.error('Error starting recognition:', error);
+          }
+        }
+      };
+
+      const stopListening = () => {
+        if (recognitionRef.current && isListening) {
+          recognitionRef.current.abort();
+          setIsListening(false);
+        }
+      };
+
+      const processInput = async (input: string, isVoice: boolean) => {
+        let currentPrompt = '';
+        let imageToSend = null;
+        let videoToSend = null;
+        
+        if (isVoice) {
+          currentPrompt = `Based on the following voice input, answer any questions if asked: "${input}" for visually impaired or blind people. Do not mention about disabilities in answer. Use conversation mode.`;
+        } else {
+          currentPrompt = `Based on the following text, answer any questions if asked: "${input}" for visually impaired or blind people. Do not mention about disabilities in answer. Use conversation mode.`;
+        }
+
+        setPrompt(currentPrompt);
+        console.log('Prompt:', currentPrompt);
+        
+        if (isSpeaking && speechSynthesisRef.current && currentUtteranceRef.current) {
+          speechSynthesisRef.current.cancel();
+          setIsSpeaking(false);
+        }
+
+        if (isListening && recognitionRef.current) {
+          recognitionRef.current.abort();
+          setIsListening(false);
+        }
+
+				if (isVoice || (isRecording && videoRef.current)) {
+				  const canvas = document.createElement('canvas');
+				  // Use the full camera sensor resolution
+				  canvas.width = videoRef.current.videoWidth;
+				  canvas.height = videoRef.current.videoHeight;
+				
+				  const ctx = canvas.getContext('2d');
+				  if (ctx) {
+				    // Draw the full frame from the video feed onto the canvas
+				    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+				    const imageDataURL = canvas.toDataURL('image/jpeg');
+				    setCapturedImage(imageDataURL);
+				    imageToSend = imageDataURL;
+				  }
+				}
+      
+        const newDescription = await generateDescription(currentPrompt, imageToSend, videoToSend, isVoice);
+        setDescription(newDescription);
+        const utterance = new SpeechSynthesisUtterance(newDescription);
+        currentUtteranceRef.current = utterance;
+        utterance.onstart = () => {
+          if (recognitionRef.current) {
+            recognitionRef.current.abort();
+            setIsListening(false);
+          }
+        };
+        utterance.onend = () => {
+          setIsSpeaking(false);
+          if (recognitionRef.current) {
+            recognitionRef.current.start();
+            setIsListening(true);
+          }
+        };
+        speechSynthesisRef.current?.speak(utterance);
+        setLastSpokenResponse(newDescription);
+        setIsSpeaking(true);
+        setInputText('');
+        setCapturedImage(null);
+      };
+
+      const triggerHapticFeedback = () => {
+        if ('vibrate' in navigator) {
+          navigator.vibrate(50);
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+          {/* Header */}
+          <header className="bg-white shadow-sm">
+            <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+              <div className="flex items-center space-x-2">
+                <Eye className="h-8 w-8 text-blue-600" />
+                <h1 className="text-2xl font-bold text-gray-900"> LifeSight - AI Vision Assistant</h1>
+              </div>
+              <Settings className="h-6 w-6 text-gray-600 cursor-pointer hover:text-blue-600" />
             </div>
-          </div>
+          </header>
 
-          {/* Controls */}
-          <div className="flex justify-center space-x-4 mb-8">
-            <button
-              onClick={() => {
-                isRecording ? stopCamera() : startCamera();
-              }}
-              className={`p-4 rounded-full ${isRecording
-                ? 'bg-red-500 hover:bg-red-600'
-                : 'bg-gray-100 hover:bg-gray-200'
-                } text-white transition-colors`}
-              aria-label="Stop camera"
-            >
-              <Camera className={`h-8 w-8 ${isRecording ? 'text-white' : 'text-gray-700'}`} />
-            </button>
+          {/* Main Content */}
+          <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+            <div className="max-w-3xl mx-auto">
+              
 
-            <button
-              onClick={processImage} 
-              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none"
-            >
-              Capture and Analyze
-            </button>
-          </div>
+              {/* Camera Preview */}
+              <div className="relative aspect-auto bg-gray-900 rounded-lg overflow-hidden shadow-lg mb-6">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  {!isRecording && !description && (
+                    <p className="text-white text-lg">Camera is active</p>
+                  )}
+                </div>
+              </div>
 
-
-          {/* Description and Accuracy */}
-          {description && (
-            <div className="bg-white rounded-lg p-6 shadow-md">
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">AI Description:</h2>
-              <p className="text-gray-700">{description}</p>
-              {accuracy !== undefined && (
-                <p className="text-sm text-gray-500 mt-2">Accuracy: {accuracy}%</p>
+              {/* Camera Selection */}
+              {availableCameras.length > 1 && (
+                <div className="mb-4">
+                  <label htmlFor="cameraSelect" className="block text-sm font-medium text-gray-700">
+                    Select Camera:
+                  </label>
+                  <div className="mt-1 flex space-x-2">
+                    {availableCameras.map((camera) => (
+                      <button
+                        key={camera.deviceId}
+                        onClick={() => setSelectedCameraId(camera.deviceId)}
+                        className={`px-4 py-2 rounded-md border ${
+                          selectedCameraId === camera.deviceId
+                            ? 'bg-blue-500 text-white border-blue-500'
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+                        } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50`}
+                      >
+                        {camera.label || `Camera ${availableCameras.indexOf(camera) + 1}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
+
+              {/* Controls */}
+              <div className="flex justify-center space-x-4 mb-8">
+                <button
+                  onClick={() => {
+                    triggerHapticFeedback();
+                    isRecording ? stopCamera() : startCamera();
+                  }}
+                  className={`p-4 rounded-full ${
+                    isRecording
+                      ? 'bg-red-500 hover:bg-red-600'
+                      : 'bg-gray-100 hover:bg-gray-200'
+                  } text-white transition-colors`}
+                  aria-label="Stop camera"
+                >
+                  <Camera className={`h-8 w-8 ${isRecording ? 'text-white' : 'text-gray-700'}`} />
+                </button>
+                <button
+                  onClick={() => {
+                    triggerHapticFeedback();
+                    speakDescription();
+                  }}
+                  className={`p-4 rounded-full transition-colors ${
+                    isSpeaking
+                      ? 'bg-green-500 hover:bg-green-600'
+                      : 'bg-gray-100 hover:bg-gray-200'
+                  }`}
+                  aria-label="Toggle speech output"
+                >
+                  <Volume2 className={`h-8 w-8 ${isSpeaking ? 'text-white' : 'text-gray-700'}`} />
+                </button>
+                <button
+                  onClick={() => {
+                    triggerHapticFeedback();
+                    isListening ? stopListening() : startListening();
+                  }}
+                  className={`p-4 rounded-full transition-colors ${
+                    isListening
+                      ? 'bg-blue-500 hover:bg-blue-600'
+                      : 'bg-gray-100 hover:bg-gray-200'
+                  }`}
+                  aria-label="Toggle voice input"
+                >
+                  <Mic className={`h-8 w-8 ${isListening ? 'text-white' : 'text-gray-700'}`} />
+                </button>
+              </div>
+
+              {/* Text Input */}
+              <form onSubmit={handleTextSubmit} className="mb-8">
+                <div className="flex rounded-md shadow-sm">
+                  <input
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    className="flex-1 block w-full rounded-md border-gray-300 focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-4 py-2"
+                    placeholder="Enter text here..."
+                  />
+                  <button
+                    type="submit"
+                    onClick={triggerHapticFeedback}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-r-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                  >
+                    <Type className="h-5 w-5" />
+                  </button>
+                </div>
+              </form>
+
+              {/* Status Indicators */}
+              <div className="flex justify-center space-x-4 mb-8">
+                <span className={`text-sm ${isListening ? 'text-green-600' : 'text-red-600'}`}>
+                  {isListening ? 'Voice commands are active' : 'Voice recognition inactive'}
+                </span>
+                {isSpeaking && (
+                  <span className="text-sm text-green-600">
+                    Speaking...
+                  </span>
+                )}
+              </div>
+
+              {/* Description */}
+              {description && (
+                <div className="bg-white rounded-lg p-6 shadow-md">
+                  <h2 className="text-lg font-semibold text-gray-900 mb-2">AI Description:</h2>
+                  <p className="text-gray-700">{description}</p>
+                </div>
+              )}
+
+							{/* Voice Commands Guide */}
+              <div className="bg-blue-50 rounded-lg p-4 mt-6">
+                <h2 className="text-sm font-semibold text-blue-800 mb-2">Voice Commands:</h2>
+                <ul className="text-sm text-blue-700 space-y-1">
+                  <li>"Start camera" - Start camera</li>
+                  <li>"Stop camera" - Stop camera</li>
+                  <li>"Read" or "Describe" - Read current description</li>
+                  <li>"Start mic" - Start voice recognition</li>
+                  <li>"Stop mic" - Stop voice recognition</li>
+                  <li>"Again" - Replay last spoken response</li>
+                  <li>"What is this?", "How do I do this?", "Where is this?", "Who is this?", "this", "it", "find", "picture", "image" - Ask questions about the input</li>
+                </ul>
+              </div>
+
+              {/* Features */}
+              <div className="mt-6">
+                <div className="bg-white p-6 rounded-lg shadow-md">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{features[currentFeatureIndex].title}</h3>
+                  <p className="text-gray-600">{features[currentFeatureIndex].description}</p>
+                </div>
+              </div>
             </div>
-          )}
+          </main>
         </div>
-      </main>
-    </div>
-  );
-}
+      );
+    }
 
-export default App;
+    export default App;

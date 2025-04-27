@@ -1,34 +1,3 @@
 @tailwind base;
-    @tailwind components;
-    @tailwind utilities;
-
-    :focus {
-      outline: 2px solid #3b82f6;
-      outline-offset: 2px;
-    }
-
-    /* High contrast mode improvements */
-    @media (forced-colors: active) {
-      * {
-        forced-color-adjust: none;
-      }
-    }
-
-    /* Reduced motion preferences */
-    @media (prefers-reduced-motion: reduce) {
-      * {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-        scroll-behavior: auto !important;
-      }
-    }
-
-    .dark {
-      color-scheme: dark;
-    }
-
-    /* Improved focus indicators for dark mode */
-    .dark :focus {
-      outline-color: #60a5fa;
-    }
+@tailwind components;
+@tailwind utilities;
